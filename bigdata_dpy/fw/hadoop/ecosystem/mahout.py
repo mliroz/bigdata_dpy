@@ -8,7 +8,7 @@ from execo.log import style
 from execo.process import SshProcess
 from execo_engine import logger
 
-from hadoop_g5k.util import ColorDecorator
+from bigdata_dpy.util import ColorDecorator
 
 # Default parameters
 DEFAULT_MAHOUT_BASE_DIR = "/tmp/mahout"

@@ -2,7 +2,8 @@ import os
 import stat
 
 from execo_engine import logger
-from hadoop_g5k.util import hw_manager
+
+from bigdata_dpy.util import hw_manager
 
 
 class HadoopException(Exception):

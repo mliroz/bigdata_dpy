@@ -5,8 +5,8 @@ from execo import Get, Remote
 from execo.process import SshProcess
 from execo_engine import logger
 
-from hadoop_g5k.cluster import HadoopCluster
-from hadoop_g5k.util.conf import replace_in_xml_file
+from bigdata_dpy.fw.hadoop import HadoopCluster
+from bigdata_dpy.util.conf import replace_in_xml_file
 
 # Configuration files
 CORE_CONF_FILE = "core-site.xml"

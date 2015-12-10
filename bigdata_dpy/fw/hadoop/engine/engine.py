@@ -19,9 +19,8 @@ from execo_g5k.planning import get_jobs_specs, get_planning, compute_slots
 
 from networkx import DiGraph, NetworkXUnfeasible, topological_sort
 
-from hadoop_g5k.cluster import HadoopCluster
-from hadoop_g5k.objects import HadoopJarJob
-from hadoop_g5k.util.util import import_class
+from bigdata_dpy.fw.hadoop import HadoopCluster, HadoopJarJob
+from bigdata_dpy.util import import_class
 
 DEFAULT_DATA_BASE_DIR = "/tests/data"
 DEFAULT_OUT_BASE_DIR = "/tests/out"

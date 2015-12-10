@@ -5,7 +5,7 @@ from execo.log import style
 from execo_g5k import get_host_cluster, get_host_attributes, get_oar_job_nodes, \
     get_oargrid_job_nodes
 
-from hadoop_g5k.util.hardware import PhysicalCluster, DeploymentHardware, \
+from bigdata_dpy.util.hardware import PhysicalCluster, DeploymentHardware, \
     HardwareManager
 
 

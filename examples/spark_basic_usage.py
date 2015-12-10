@@ -1,8 +1,9 @@
 import os
 
 from execo_g5k import get_oar_job_nodes
-from hadoop_g5k import HadoopV2Cluster
-from hadoop_g5k.ecosystem.spark import YARN_MODE, SparkCluster, \
+
+from bigdata_dpy.fw.hadoop import HadoopV2Cluster
+from bigdata_dpy.fw.hadoop.ecosystem.spark import YARN_MODE, SparkCluster, \
     JavaOrScalaSparkJob
 
 # Parameters

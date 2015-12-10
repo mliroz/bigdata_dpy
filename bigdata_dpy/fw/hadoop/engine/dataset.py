@@ -7,8 +7,8 @@ from execo.action import Put, TaktukRemote
 from execo.process import SshProcess
 from execo_engine import logger
 
-from hadoop_g5k.objects import HadoopJarJob
-from hadoop_g5k.util.util import import_function
+from bigdata_dpy.fw.hadoop.objects import HadoopJarJob
+from bigdata_dpy.util import import_function
 
 
 class Dataset(object):

@@ -11,11 +11,11 @@ from execo.log import style
 from execo.process import SshProcess
 from execo_engine import logger
 
-from hadoop_g5k.cluster import HadoopCluster
-from hadoop_g5k.cluster_v2 import HadoopV2Cluster
-from hadoop_g5k.objects import HadoopJarJob
-from hadoop_g5k.util import hw_manager
-from hadoop_g5k.util.serialization import generate_new_id, \
+from bigdata_dpy.hadoop_g5k.cluster import HadoopCluster
+from bigdata_dpy.hadoop_g5k.cluster_v2 import HadoopV2Cluster
+from bigdata_dpy.fw.hadoop.objects import HadoopJarJob
+from bigdata_dpy.util import hw_manager
+from bigdata_dpy.util.serialization import generate_new_id, \
     get_default_id, cluster_exists, deserialize_cluster, remove_cluster, \
     serialize_cluster
 

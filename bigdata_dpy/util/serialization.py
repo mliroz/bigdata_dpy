@@ -4,8 +4,7 @@ import pickle
 
 from execo_engine import logger
 
-from hadoop_g5k import HadoopCluster
-
+from bigdata_dpy.fw.hadoop import HadoopCluster
 
 __user_login = getpass.getuser()
 serialize_base = "/tmp/" + __user_login + "_"

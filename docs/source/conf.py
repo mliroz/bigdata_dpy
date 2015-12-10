@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 #
-# hadoop_g5k documentation build configuration file, created by
+# hadoop documentation build configuration file, created by
 # sphinx-quickstart on Mon Dec  1 14:33:09 2014.
 #
 # This file is execfile()d with the current directory set to its
@@ -47,7 +47,7 @@ source_suffix = '.rst'
 master_doc = 'index'
 
 # General information about the project.
-project = u'hadoop_g5k'
+project = u'bigdata_dpy'
 copyright = u'2014, Miguel Liroz Gistau'
 
 # The version info for the project you're documenting, acts as replacement for
@@ -198,7 +198,7 @@ html_static_path = ['_static']
 #html_search_scorer = 'scorer.js'
 
 # Output file base name for HTML help builder.
-htmlhelp_basename = 'hadoop_g5kdoc'
+htmlhelp_basename = 'bigdata_dpydoc'
 
 # -- Options for LaTeX output ---------------------------------------------
 
@@ -220,7 +220,7 @@ latex_elements = {
 # (source start file, target name, title,
 #  author, documentclass [howto, manual, or own class]).
 latex_documents = [
-  ('index', 'hadoop_g5k.tex', u'hadoop\\_g5k Documentation',
+  ('index', 'hadoop.tex', u'hadoop\\_g5k Documentation',
    u'Miguel Liroz Gistau', 'manual'),
 ]
 
@@ -250,7 +250,7 @@ latex_documents = [
 # One entry per manual page. List of tuples
 # (source start file, name, description, authors, manual section).
 man_pages = [
-    ('index', 'hadoop_g5k', u'hadoop_g5k Documentation',
+    ('index', 'hadoop', u'hadoop Documentation',
      [u'Miguel Liroz Gistau'], 1)
 ]
 
@@ -264,8 +264,8 @@ man_pages = [
 # (source start file, target name, title, author,
 #  dir menu entry, description, category)
 texinfo_documents = [
-  ('index', 'hadoop_g5k', u'hadoop_g5k Documentation',
-   u'Miguel Liroz Gistau', 'hadoop_g5k', 'One line description of project.',
+  ('index', 'hadoop', u'hadoop Documentation',
+   u'Miguel Liroz Gistau', 'hadoop', 'One line description of project.',
    'Miscellaneous'),
 ]
 
@@ -283,6 +283,7 @@ texinfo_documents = [
 
 # Skip some modules
 from mock import Mock as MagicMock
+
 
 class Mock(MagicMock):
     @classmethod

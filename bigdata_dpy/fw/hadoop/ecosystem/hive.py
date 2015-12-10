@@ -12,7 +12,7 @@ from execo.log import style
 from execo.process import SshProcess
 from execo_engine import logger
 
-from hadoop_g5k.util.conf import replace_in_xml_file, create_xml_file
+from bigdata_dpy.util.conf import replace_in_xml_file, create_xml_file
 
 # Default parameters
 DEFAULT_HIVE_BASE_DIR = "/tmp/hive"

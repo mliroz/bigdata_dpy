@@ -3,7 +3,6 @@ import re
 import socket
 
 from execo import SshProcess
-
 from execo.action import Remote, TaktukRemote
 from execo_engine import logger
 
@@ -17,10 +16,10 @@ def is_within_g5k():
         return False
 
 if is_within_g5k():
-    from hadoop_g5k.util.g5k import G5kHardwareManager
+    from bigdata_dpy.fw.hadoop import G5kHardwareManager
     hw_manager = G5kHardwareManager()
 else:
-    from hadoop_g5k.util.hardware import GenericHardwareManager
+    from bigdata_dpy.util import GenericHardwareManager
     hw_manager = GenericHardwareManager()
 
 

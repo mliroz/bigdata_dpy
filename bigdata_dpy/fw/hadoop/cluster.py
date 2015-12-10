@@ -12,10 +12,10 @@ from execo.action import Put, TaktukPut, Get, Remote, TaktukRemote, \
 from execo.process import SshProcess
 from execo_engine import logger
 
-from hadoop_g5k.objects import HadoopTopology, HadoopException
-from hadoop_g5k.util import get_java_home, ColorDecorator, hw_manager, \
+from bigdata_dpy.fw.hadoop import HadoopTopology, HadoopException
+from bigdata_dpy.util import get_java_home, ColorDecorator, hw_manager, \
     check_java_version
-from hadoop_g5k.util.conf import replace_in_xml_file, read_in_xml_file, \
+from bigdata_dpy.util.conf import replace_in_xml_file, read_in_xml_file, \
     read_param_in_xml_file
 
 # Configuration files

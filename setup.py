@@ -3,23 +3,23 @@
 from setuptools import setup, find_packages
 
 setup(
-    name="hadoop_g5k",
+    name="bigdata_dpy",
     version="0.1",
 
-    packages=["hadoop_g5k", "hadoop_g5k/util", "hadoop_g5k/engine",
-              "hadoop_g5k/ecosystem"],
-    scripts=["scripts/hg5k", "scripts/hadoop_engine", "scripts/spark_g5k",
-             "scripts/mahout_g5k"],
+    packages=find_packages(),
+    scripts=["scripts/hg5k", "scripts/spark_g5k", "scripts/mahout_g5k",
+             "scripts/hadoop_engine",
+             "scripts/cassandra_g5k", "mongo_g5k"],
 
-    install_requires=["execo", " networkx"],
+    install_requires=["execo", "networkx"],
 
     # PyPI
     author='Miguel Liroz Gistau',
     author_email='miguel.liroz_gistau@inria.fr',
     description="A collection of scripts and packages that help in the "
                 "deployment and experimental evaluation of Hadoop in Grid5000.",
-    url="https://github.com/mliroz/hadoop_g5k",
+    url="https://github.com/mliroz/hadoop",
     license="BSD",
-    keywords="hadoop spark g5k grid5000 execo",
+    keywords="hadoop spark mongodb cassandra hive g5k grid5000 execo",
   
 )

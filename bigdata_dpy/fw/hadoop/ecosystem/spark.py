@@ -13,9 +13,9 @@ from execo.log import style
 from execo.process import SshProcess
 from execo_engine import logger
 
-from hadoop_g5k.util import ColorDecorator, check_java_version, get_java_home, \
+from bigdata_dpy.util import ColorDecorator, check_java_version, get_java_home, \
     hw_manager
-from hadoop_g5k.util.conf import write_in_props_file, read_param_in_props_file, \
+from bigdata_dpy.util.conf import write_in_props_file, read_param_in_props_file, \
     read_in_props_file
 
 # Configuration files
