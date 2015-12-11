@@ -335,11 +335,15 @@ class MongoDBCluster(BaseCluster):
 
         if mongos and self.do_sharding:
             call("ssh -t " + node.address + " " +
-                 self.bin_dir + "/mongos --port " + str(self.ms_port),
+                 self.bin_dir + "/mongo"
+                 " --host " + node.address +
+                 " --port " + str(self.ms_port),
                  shell=True)
         else:
             call("ssh -t " + node.address + " " +
-                 self.bin_dir + "/mongo --port " + str(self.md_port),
+                 self.bin_dir + "/mongo"
+                 " --host " + node.address +
+                 " --port " + str(self.md_port),
                  shell=True)
 
     def stop(self):
