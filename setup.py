@@ -7,9 +7,9 @@ setup(
     version="0.1",
 
     packages=find_packages(),
-    scripts=["scripts/hg5k", "scripts/spark_g5k", "scripts/mahout_g5k",
+    scripts=["scripts/hdpy", "scripts/spark_dpy", "scripts/mahout_dpy",
              "scripts/hadoop_engine",
-             "scripts/cassandra_g5k", "mongo_g5k"],
+             "scripts/cassandra_dpy", "scripts/mongo_dpy"],
 
     install_requires=["execo", "networkx"],
 

@@ -1,20 +1,23 @@
 #!/usr/bin/env python
-from argparse import ArgumentParser, RawTextHelpFormatter
+
 import os
 import sys
+from argparse import ArgumentParser, RawTextHelpFormatter
 
 from execo import Host
-from execo.log import style, logger
+from execo.log import style
+from execo_engine import logger
 
-from dm_g5k.db.cassandra import CassandraCluster
-from dm_g5k.util.serialization import cluster_exists, get_default_id, \
-    generate_new_id, deserialize_cluster, remove_cluster, serialize_cluster
-from dm_g5k.util import generate_hosts
+from bigdata_dpy.fw.hadoop.cluster import HadoopCluster
+from bigdata_dpy.fw.hadoop.ecosystem.hive import HiveCluster
+from bigdata_dpy.util.serialization import generate_new_id, cluster_exists, \
+    link_to_hadoop_cluster, deserialize_cluster, remove_cluster, \
+    serialize_cluster, get_default_id
 
 if __name__ == "__main__":
 
-    prog = "cassandra_g5k"
-    description = "This tool helps you to manage a Cassandra cluster in Grid5000."
+    prog = "hive_dpy"
+    description = "This tool helps you to manage a Hive cluster in Grid5000."
     parser = ArgumentParser(prog=prog,
                             description=description,
                             formatter_class=RawTextHelpFormatter,
@@ -22,7 +25,7 @@ if __name__ == "__main__":
 
     actions = parser.add_argument_group(style.host("General options"),
                                         "Options to be used generally "
-                                        "with Hadoop actions.")
+                                        "with Hive actions.")
 
     actions.add_argument("-h", "--help",
                          action="help",
@@ -50,16 +53,17 @@ if __name__ == "__main__":
     object_group = parser.add_argument_group(style.host("Object management "
                                                         "options"),
                                              "Options to create and destroy "
-                                             "hadoop cluster objects.")
+                                             "Spark cluster objects")
 
     object_mutex_group = object_group.add_mutually_exclusive_group()
 
     object_mutex_group.add_argument("--create",
-                                    metavar="MACHINELIST",
+                                    metavar="MODE",
                                     nargs=1,
                                     action="store",
-                                    help="Create the cluster object with the "
-                                    "nodes in MACHINELIST file")
+                                    help="Create the cluster object linked to "
+                                         "the HadoopCluster with the given "
+                                         "identifier")
 
     object_mutex_group.add_argument("--delete",
                                     dest="delete",
@@ -74,16 +78,16 @@ if __name__ == "__main__":
                               "(INI file). Applies only to --create")
 
     object_group.add_argument("--bootstrap",
-                              metavar="CASSANDRA_TAR",
+                              metavar="HIVE_TAR",
                               nargs=1,
                               action="store",
-                              help="Install Cassandra in the cluster nodes taking"
+                              help="Install Hive in the cluster nodes taking"
                                    " into account the specified properties.\n"
-                                   "CASSANDRA_TAR defines the path of the .tar.gz"
-                                   " file containing Cassandra binaries.")
+                                   "HIVE_TAR defines the path of the .tar.gz "
+                                   "file containing Hive binaries.")
 
-    actions = parser.add_argument_group(style.host("Cassandra actions"),
-                                        "Actions to execute in the Cassandra "
+    actions = parser.add_argument_group(style.host("Hive actions"),
+                                        "Actions to execute in the Hive "
                                         "cluster. Several options can be "
                                         "indicated at the same time.\n"
                                         "The order of execution is fixed no "
@@ -94,29 +98,35 @@ if __name__ == "__main__":
     actions.add_argument("--initialize",
                          dest="initialize",
                          action="store_true",
-                         help="Initialize cluster: Copy configuration and "
-                         "format dfs")
+                         help="Initialize cluster: Copy configuration")
 
     actions.add_argument("--start",
                          dest="start",
                          action="store_true",
-                         help="Start the NameNode and JobTracker")
+                         help="Start the master and slaves")
 
     exec_group = actions.add_mutually_exclusive_group()
 
+    exec_group.add_argument("--job",
+                            action="store",
+                            nargs="+",
+                            metavar=("LOCAL_JOB_PATH", "PARAM"),
+                            help="Copy the job to the cluster and execute it "
+                                 "with the specified parameters")
+
     exec_group.add_argument("--shell",
                             action="store_true",
-                            help="Start a shell session in Cassandra")
+                            help="Start a shell session in mongodb")
 
     actions.add_argument("--stop",
                          dest="stop",
                          action="store_true",
-                         help="Stop the NameNode and JobTracker")
+                         help="Stop the master and slaves")
 
     actions.add_argument("--clean",
                          dest="clean",
                          action="store_true",
-                         help="Remove Hadoop logs and clean the dfs")
+                         help="Remove files created by Hive")
 
     exec_opts = parser.add_argument_group(style.host("Execution options"),
                                           "Parameters for the execution of "
@@ -140,64 +150,65 @@ if __name__ == "__main__":
 
     # Get id
     if args.id:
-        cc_id = int(args.id[0])
+        hivec_id = int(args.id[0])
     else:
         if args.create:
-            cc_id = generate_new_id(CassandraCluster.get_cluster_type())
+            hivec_id = generate_new_id(HiveCluster.get_cluster_type())
         else:
-            cc_id = get_default_id(CassandraCluster.get_cluster_type())
-            if not cc_id:
+            hivec_id = get_default_id(HiveCluster.get_cluster_type())
+            if not hivec_id:
                 logger.error("There is no available cluster. You must create a"
                              " new one")
                 sys.exit(os.EX_DATAERR)
 
-    logger.info("Using id = " + str(cc_id) + " (CASSANDRA)")
+    logger.info("Using id = " + str(hivec_id) + " (HIVE)")
 
-    verbose = True
-    if args.quiet:
-        verbose = False
+    verbose = not args.quiet
 
     # Create or load object
     if args.create:
 
-        if cluster_exists(CassandraCluster.get_cluster_type(), cc_id):
-            logger.error("There is a Cassandra cluster with that id. You must "
+        if cluster_exists(HiveCluster.get_cluster_type(), hivec_id):
+            logger.error("There is a Spark cluster with that id. You must "
                          "remove it before or chose another id")
             sys.exit(os.EX_DATAERR)
 
-        hosts = generate_hosts(args.create[0])
+        # Deserialize HadoopCluster and link it
+        hc_id = args.create[0]
+        hc = deserialize_cluster(HadoopCluster.get_cluster_type(), hc_id)
+        link_to_hadoop_cluster(HiveCluster.get_cluster_type(), hivec_id, hc_id)
 
-        if args.properties:
-            cc = CassandraCluster(hosts, args.properties[0])
-        else:
-            cc = CassandraCluster(hosts)
+        # Create cluster
+        props = args.properties[0] if args.properties else None
+        hivec = HiveCluster(hc, config_file=props)
 
     elif args.delete:
 
         # Clean
-        cc = deserialize_cluster(CassandraCluster.get_cluster_type(), cc_id)
-        if cc.initialized:
+        hivec = deserialize_cluster(HiveCluster.get_cluster_type(), hivec_id)
+        if hivec.initialized:
             logger.warn("The cluster needs to be cleaned before removed.")
-            cc.clean()
+            hivec.clean()
 
-        # Remove cc dump file
-        logger.info("Removing cc dump file from cluster")
-        remove_cluster(CassandraCluster.get_cluster_type(), cc_id)
+        # Remove hc dump file
+        logger.info("Removing hc dump file from cluster")
+        remove_cluster(HiveCluster.get_cluster_type(), hivec_id)
 
         sys.exit(os.EX_OK)
     else:
+
         # Deserialize
-        cc = deserialize_cluster(CassandraCluster.get_cluster_type(), cc_id)
+        hivec = deserialize_cluster(HiveCluster.get_cluster_type(), hivec_id)
 
     # Execute options
     if args.bootstrap:
-        cc.bootstrap(args.bootstrap[0])
+        hivec.bootstrap(args.bootstrap[0])
 
     if args.initialize:
-        cc.initialize()
+        hivec.initialize()
 
     if args.start:
-        cc.start()
+        hivec.start()
 
     if args.shell or args.job:
         node_host = Host(args.node[0]) if args.node else None
@@ -208,7 +219,7 @@ if __name__ == "__main__":
             exec_params = None
 
         if args.shell:
-            cc.start_shell(node=node_host, exec_params=exec_params)
+            hivec.start_shell(node=node_host, exec_params=exec_params)
         elif args.job:
             logger.error("Not implemented yet")
 
@@ -221,9 +232,9 @@ if __name__ == "__main__":
                         "Ignoring argument")
 
     if args.stop:
-        cc.stop()
+        hivec.stop()
 
     if args.clean:
-        cc.clean()
+        hivec.clean()
 
-    serialize_cluster(CassandraCluster.get_cluster_type(), cc_id, cc)
+    serialize_cluster(HiveCluster.get_cluster_type(), hivec_id, hivec)

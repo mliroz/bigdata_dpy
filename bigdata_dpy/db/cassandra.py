@@ -257,6 +257,15 @@ class CassandraCluster(Cluster):
             if not action.ended:
                 action.kill()
 
+    def change_conf(self, params, config_file=None, default_file=None):
+        pass
+
+    def get_conf(self, param_names, node=None):
+        pass
+
+    def get_conf_param(self, param_name, default_value=None, node=None):
+        pass
+
     def start(self):
 
         self._check_initialization()

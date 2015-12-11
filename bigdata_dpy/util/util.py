@@ -16,10 +16,10 @@ def is_within_g5k():
         return False
 
 if is_within_g5k():
-    from bigdata_dpy.fw.hadoop import G5kHardwareManager
+    from bigdata_dpy.util.g5k import G5kHardwareManager
     hw_manager = G5kHardwareManager()
 else:
-    from bigdata_dpy.util import GenericHardwareManager
+    from bigdata_dpy.util.hardware import GenericHardwareManager
     hw_manager = GenericHardwareManager()
 
 

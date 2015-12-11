@@ -7,16 +7,15 @@ from argparse import ArgumentParser, RawTextHelpFormatter
 from execo.log import style
 from execo_engine import logger
 
-from dm_g5k.db.mongodb import MongoDBCluster
-from dm_g5k.util import generate_hosts
-from dm_g5k.util.serialization import generate_new_id, get_default_id, \
+from bigdata_dpy.db.mongodb import MongoDBCluster
+from bigdata_dpy.util import hw_manager
+from bigdata_dpy.util.serialization import generate_new_id, get_default_id, \
     cluster_exists, deserialize_cluster, remove_cluster, serialize_cluster
 
-CLUSTER_TYPE = "mongodb"
 
-if __name__ == "__main__":
+def parse_args():
 
-    prog = "mongo_g5k"
+    prog = "mongo_dpy"
     description = "This tool helps you to manage a MongoDB cluster in Grid5000."
     parser = ArgumentParser(prog=prog,
                             description=description,
@@ -119,22 +118,27 @@ if __name__ == "__main__":
                             action="store_true",
                             help="Start a shell session in mongodb")
 
-    args = parser.parse_args()
+    return parser.parse_args()
+
+if __name__ == "__main__":
+
+    cluster_type = MongoDBCluster.get_cluster_type()
+    args = parse_args()
 
     # Get id
     if args.id:
         mdb_id = int(args.id[0])
     else:
         if args.create:
-            mdb_id = generate_new_id(CLUSTER_TYPE)
+            mdb_id = generate_new_id(cluster_type)
         else:
-            mdb_id = get_default_id(CLUSTER_TYPE)
+            mdb_id = get_default_id(cluster_type)
             if not mdb_id:
                 logger.error("There is no available cluster. You must create a"
                              " new one")
                 sys.exit(os.EX_DATAERR)
 
-    logger.info("Using id = " + str(mdb_id) + " (MONGO DB)")
+    logger.debug("Using id = " + str(mdb_id) + " (MONGO DB)")
 
     verbose = True
     if args.quiet:
@@ -143,12 +147,12 @@ if __name__ == "__main__":
     # Create or load object
     if args.create:
 
-        if cluster_exists(CLUSTER_TYPE, mdb_id):
+        if cluster_exists(cluster_type, mdb_id):
             logger.error("There is a Mongo DB cluster with that id. You must "
                          "remove it before or chose another id")
             sys.exit(os.EX_DATAERR)
 
-        hosts = generate_hosts(args.create[0])
+        hosts = hw_manager.get_hosts_list(args.create[0])
 
         if args.properties:
             mdb_cluster = MongoDBCluster(hosts, args.properties[0])
@@ -162,19 +166,22 @@ if __name__ == "__main__":
         if args.delete:
 
             # Clean
-            mdb_cluster = deserialize_cluster(CLUSTER_TYPE, mdb_id)
+            mdb_cluster = deserialize_cluster(cluster_type, mdb_id)
             if mdb_cluster.initialized:
                 logger.warn("The cluster needs to be cleaned before removed.")
                 mdb_cluster.clean()
 
             # Remove hc dump file
             logger.info("Removing hc dump file from cluster")
-            remove_cluster(CLUSTER_TYPE, mdb_id)
+            remove_cluster(MongoDBCluster.get_cluster_type(), mdb_id)
 
             sys.exit(os.EX_OK)
         else:
             # Deserialize
-            mdb_cluster = deserialize_cluster(CLUSTER_TYPE, mdb_id)
+            mdb_cluster = deserialize_cluster(cluster_type, mdb_id)
+
+        # Print cluster info
+        logger.info("mongodb_id = %d -> %s" % (mdb_id, mdb_cluster))
 
     # Execute options
     if args.bootstrap:
@@ -199,4 +206,4 @@ if __name__ == "__main__":
     if args.clean:
         mdb_cluster.clean()
 
-    serialize_cluster(CLUSTER_TYPE, mdb_id, mdb_cluster)
+    serialize_cluster(cluster_type, mdb_id, mdb_cluster)

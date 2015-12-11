@@ -11,8 +11,7 @@ from execo.log import style
 from execo.process import SshProcess
 from execo_engine import logger
 
-from bigdata_dpy.hadoop_g5k.cluster import HadoopCluster
-from bigdata_dpy.hadoop_g5k.cluster_v2 import HadoopV2Cluster
+from bigdata_dpy.fw.hadoop import HadoopCluster, HadoopV2Cluster
 from bigdata_dpy.fw.hadoop.objects import HadoopJarJob
 from bigdata_dpy.util import hw_manager
 from bigdata_dpy.util.serialization import generate_new_id, \
@@ -22,7 +21,7 @@ from bigdata_dpy.util.serialization import generate_new_id, \
 
 def parse_args():
 
-    prog = "hg5k"
+    prog = "hdpy"
     description = "This tool helps you to manage a Hadoop cluster in Grid5000."
     parser = ArgumentParser(prog=prog,
                             description=description,

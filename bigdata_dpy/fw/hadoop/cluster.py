@@ -12,7 +12,7 @@ from execo.action import Put, TaktukPut, Get, Remote, TaktukRemote, \
 from execo.process import SshProcess
 from execo_engine import logger
 
-from bigdata_dpy.fw.hadoop import HadoopTopology, HadoopException
+from bigdata_dpy.fw.hadoop.objects import HadoopTopology, HadoopException
 from bigdata_dpy.util import get_java_home, ColorDecorator, hw_manager, \
     check_java_version
 from bigdata_dpy.util.conf import replace_in_xml_file, read_in_xml_file, \

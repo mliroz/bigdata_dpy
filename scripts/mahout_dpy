@@ -6,18 +6,19 @@ from argparse import ArgumentParser, RawTextHelpFormatter
 
 from execo import Host
 from execo.log import style
+
 from execo_engine import logger
 
-from hadoop_g5k.cluster import HadoopCluster
-from bigdata_dpy.fw.hadoop.ecosystem.hive import HiveCluster
-from hadoop_g5k.util.serialization import generate_new_id, cluster_exists, \
-    link_to_hadoop_cluster, deserialize_cluster, remove_cluster, \
-    serialize_cluster, get_default_id
+from bigdata_dpy.fw.hadoop.cluster import HadoopCluster
+from bigdata_dpy.fw.hadoop.ecosystem.mahout import MahoutCluster
+from bigdata_dpy.util.serialization import generate_new_id, \
+    get_default_id, deserialize_cluster, remove_cluster, serialize_cluster, \
+    cluster_exists, link_to_hadoop_cluster
 
 if __name__ == "__main__":
 
-    prog = "hive_g5k"
-    description = "This tool helps you to manage a Hive cluster in Grid5000."
+    prog = "mahout_dpy"
+    description = "This tool helps you to manage a Mahout cluster in Grid5000."
     parser = ArgumentParser(prog=prog,
                             description=description,
                             formatter_class=RawTextHelpFormatter,
@@ -25,7 +26,7 @@ if __name__ == "__main__":
 
     actions = parser.add_argument_group(style.host("General options"),
                                         "Options to be used generally "
-                                        "with Hive actions.")
+                                        "with Mahout actions.")
 
     actions.add_argument("-h", "--help",
                          action="help",
@@ -37,6 +38,13 @@ if __name__ == "__main__":
                          metavar="ID",
                          help="The identifier of the cluster. If not indicated"
                                 ", last used cluster will be used (if any)")
+
+    actions.add_argument("--node",
+                         action="store",
+                         nargs=1,
+                         metavar="NODE",
+                         help="Node where the action will be executed. Applies"
+                                " only to --execute")
 
     verbose_group = actions.add_mutually_exclusive_group()
 
@@ -53,17 +61,17 @@ if __name__ == "__main__":
     object_group = parser.add_argument_group(style.host("Object management "
                                                         "options"),
                                              "Options to create and destroy "
-                                             "Spark cluster objects")
+                                             "Mahout cluster objects")
 
     object_mutex_group = object_group.add_mutually_exclusive_group()
 
     object_mutex_group.add_argument("--create",
-                                    metavar="MODE",
+                                    metavar="ID",
                                     nargs=1,
                                     action="store",
-                                    help="Create the cluster object linked to "
-                                         "the HadoopCluster with the given "
-                                         "identifier")
+                                    help="Create the cluster linked to the "
+                                         "Hadoop cluster with the given "
+                                         "identifier.")
 
     object_mutex_group.add_argument("--delete",
                                     dest="delete",
@@ -78,16 +86,16 @@ if __name__ == "__main__":
                               "(INI file). Applies only to --create")
 
     object_group.add_argument("--bootstrap",
-                              metavar="HIVE_TAR",
+                              metavar="MAHOUT_TAR",
                               nargs=1,
                               action="store",
-                              help="Install Hive in the cluster nodes taking"
+                              help="Install Mahout in the cluster nodes taking"
                                    " into account the specified properties.\n"
-                                   "HIVE_TAR defines the path of the .tar.gz "
-                                   "file containing Hive binaries.")
+                                   "MAHOUT_TAR defines the path of the .tar.gz "
+                                   "file containing Mahout binaries.")
 
-    actions = parser.add_argument_group(style.host("Hive actions"),
-                                        "Actions to execute in the Hive "
+    actions = parser.add_argument_group(style.host("Mahout actions"),
+                                        "Actions to execute in the Mahout "
                                         "cluster. Several options can be "
                                         "indicated at the same time.\n"
                                         "The order of execution is fixed no "
@@ -100,75 +108,39 @@ if __name__ == "__main__":
                          action="store_true",
                          help="Initialize cluster: Copy configuration")
 
-    actions.add_argument("--start",
-                         dest="start",
-                         action="store_true",
-                         help="Start the master and slaves")
-
-    exec_group = actions.add_mutually_exclusive_group()
-
-    exec_group.add_argument("--job",
-                            action="store",
-                            nargs="+",
-                            metavar=("LOCAL_JOB_PATH", "PARAM"),
-                            help="Copy the job to the cluster and execute it "
-                                 "with the specified parameters")
-
-    exec_group.add_argument("--shell",
-                            action="store_true",
-                            help="Start a shell session in mongodb")
-
-    actions.add_argument("--stop",
-                         dest="stop",
-                         action="store_true",
-                         help="Stop the master and slaves")
+    actions.add_argument("--execute",
+                         dest="execute",
+                         action="store",
+                         help="Initialize cluster: Copy configuration")
 
     actions.add_argument("--clean",
                          dest="clean",
                          action="store_true",
-                         help="Remove files created by Hive")
-
-    exec_opts = parser.add_argument_group(style.host("Execution options"),
-                                          "Parameters for the execution of "
-                                          "jobs. Apply only to --job, and "
-                                          "--shell")
-
-    exec_opts.add_argument("--node",
-                           action="store",
-                           nargs=1,
-                           metavar="NODE",
-                           help="Node where the action will be executed")
-
-    exec_opts.add_argument("--exec_params",
-                           action="store",
-                           nargs="+",
-                           metavar="PARAM",
-                           help="The options for job execution. Options should"
-                                " be written without the \"--\" prefix")
+                         help="Remove files created by Mahout")
 
     args = parser.parse_args()
 
     # Get id
     if args.id:
-        hivec_id = int(args.id[0])
+        mc_id = int(args.id[0])
     else:
         if args.create:
-            hivec_id = generate_new_id(HiveCluster.get_cluster_type())
+            mc_id = generate_new_id(MahoutCluster.get_cluster_type())
         else:
-            hivec_id = get_default_id(HiveCluster.get_cluster_type())
-            if not hivec_id:
+            mc_id = get_default_id(MahoutCluster.get_cluster_type())
+            if not mc_id:
                 logger.error("There is no available cluster. You must create a"
                              " new one")
                 sys.exit(os.EX_DATAERR)
 
-    logger.info("Using id = " + str(hivec_id) + " (HIVE)")
+    logger.info("Using id = " + str(mc_id) + " (MAHOUT)")
 
     verbose = not args.quiet
 
     # Create or load object
     if args.create:
 
-        if cluster_exists(HiveCluster.get_cluster_type(), hivec_id):
+        if cluster_exists(MahoutCluster.get_cluster_type(), mc_id):
             logger.error("There is a Spark cluster with that id. You must "
                          "remove it before or chose another id")
             sys.exit(os.EX_DATAERR)
@@ -176,65 +148,51 @@ if __name__ == "__main__":
         # Deserialize HadoopCluster and link it
         hc_id = args.create[0]
         hc = deserialize_cluster(HadoopCluster.get_cluster_type(), hc_id)
-        link_to_hadoop_cluster(HiveCluster.get_cluster_type(), hivec_id, hc_id)
 
-        # Create cluster
+        link_to_hadoop_cluster(MahoutCluster.get_cluster_type(), mc_id, hc_id)
+
         props = args.properties[0] if args.properties else None
-        hivec = HiveCluster(hc, config_file=props)
+
+        mc = MahoutCluster(hc, config_file=props)
 
     elif args.delete:
 
         # Clean
-        hivec = deserialize_cluster(HiveCluster.get_cluster_type(), hivec_id)
-        if hivec.initialized:
+        mc = deserialize_cluster(MahoutCluster.get_cluster_type(), mc_id)
+        if mc.initialized:
             logger.warn("The cluster needs to be cleaned before removed.")
-            hivec.clean()
+            mc.clean()
 
         # Remove hc dump file
         logger.info("Removing hc dump file from cluster")
-        remove_cluster(HiveCluster.get_cluster_type(), hivec_id)
+        remove_cluster(MahoutCluster.get_cluster_type(), mc_id)
 
         sys.exit(os.EX_OK)
     else:
 
         # Deserialize
-        hivec = deserialize_cluster(HiveCluster.get_cluster_type(), hivec_id)
+        mc = deserialize_cluster(MahoutCluster.get_cluster_type(), mc_id)
 
     # Execute options
     if args.bootstrap:
-        hivec.bootstrap(args.bootstrap[0])
+        mc.bootstrap(args.bootstrap[0])
 
     if args.initialize:
-        hivec.initialize()
+        mc.initialize()
 
-    if args.start:
-        hivec.start()
-
-    if args.shell or args.job:
+    if args.execute:
         node_host = Host(args.node[0]) if args.node else None
 
-        if args.exec_params:
-            exec_params = ["--" + p.replace("=", " ") for p in args.exec_params]
+        if node_host:
+            mc.execute(args.execute, node_host, verbose=verbose)
         else:
-            exec_params = None
-
-        if args.shell:
-            hivec.start_shell(node=node_host, exec_params=exec_params)
-        elif args.job:
-            logger.error("Not implemented yet")
+            mc.execute(args.execute, verbose=verbose)
 
     else:
         if args.node:
-            logger.warn("--node only applies to --job or --shell. Ignoring "
-                        "argument")
-        if args.exec_params:
-            logger.warn("--exec_params only applies to --job or --shell. "
-                        "Ignoring argument")
-
-    if args.stop:
-        hivec.stop()
+            logger.warn("--node only applies to --execute")
 
     if args.clean:
-        hivec.clean()
+        mc.clean()
 
-    serialize_cluster(HiveCluster.get_cluster_type(), hivec_id, hivec)
+    serialize_cluster(MahoutCluster.get_cluster_type(), mc_id, mc)

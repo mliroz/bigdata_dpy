@@ -1,18 +1,18 @@
 import os
 import shutil
 import tempfile
+from execo import SshProcess
+import time
 import yaml
 
-from ConfigParser import ConfigParser
 from subprocess import call
-
 from yaml import CLoader as Loader, CDumper as Dumper
-from execo.action import TaktukPut, Get, Remote, TaktukRemote, \
-    SequentialActions
-from execo_engine import logger
-from execo_g5k.api_utils import get_host_cluster
 
-from bigdata_dpy.base.cluster import Cluster
+from execo.action import TaktukPut, Remote, TaktukRemote, SequentialActions
+from execo.log import style
+from execo_engine import logger
+
+from bigdata_dpy.base.cluster import BaseCluster
 
 
 # Configuration files
@@ -22,33 +22,39 @@ CONF_FILE = "mongodb.conf"
 DEFAULT_MONGODB_BASE_DIR = "/tmp/mongodb"
 DEFAULT_MONGODB_DATA_DIR = DEFAULT_MONGODB_BASE_DIR + "/data"
 DEFAULT_MONGODB_CONF_DIR = DEFAULT_MONGODB_BASE_DIR + "/conf"
-DEFAULT_MONGODB_LOGS_FILE = DEFAULT_MONGODB_BASE_DIR + "/mongodb.log"
+DEFAULT_MONGODB_LOGS_DIR = DEFAULT_MONGODB_BASE_DIR + "/logs"
 
-DEFAULT_MONGODB_PORT = 27017
+DEFAULT_MONGOD_PORT = 27017
+DEFAULT_MONGOS_PORT = 27019
 
-DEFAULT_MONGODB_LOCAL_CONF_DIR = "conf"
+DEFAULT_MONGODB_LOCAL_CONF_DIR = "mongo-conf"
 
 
-class MongoDBCluster(Cluster):
+class MongoDBCluster(BaseCluster):
     """This class manages the whole life-cycle of a MongoDB cluster.
     """
-
-    # Default properties
-    defaults = {
-        "mongodb_base_dir": DEFAULT_MONGODB_BASE_DIR,
-        "mongodb_data_dir": DEFAULT_MONGODB_DATA_DIR,
-        "mongodb_conf_dir": DEFAULT_MONGODB_CONF_DIR,
-        "mongodb_logs_file": DEFAULT_MONGODB_LOGS_FILE,
-        "mongodb_port": str(DEFAULT_MONGODB_PORT),
-
-        "local_base_conf_dir": DEFAULT_MONGODB_LOCAL_CONF_DIR
-    }
 
     @staticmethod
     def get_cluster_type():
         return "mongodb"
 
-    def __init__(self, hosts, config_file=None):
+    def get_default_conf(self):
+        ctype = self.get_cluster_type()
+
+        defaults = {
+            ctype + "_base_dir": DEFAULT_MONGODB_BASE_DIR,
+            ctype + "_data_dir": DEFAULT_MONGODB_DATA_DIR,
+            ctype + "_conf_dir": DEFAULT_MONGODB_CONF_DIR,
+            ctype + "_logs_dir": DEFAULT_MONGODB_LOGS_DIR,
+            ctype + "_md_port": str(DEFAULT_MONGOD_PORT),
+            ctype + "_ms_port": str(DEFAULT_MONGOS_PORT),
+
+            ctype + "_local_base_conf_dir": DEFAULT_MONGODB_LOCAL_CONF_DIR
+        }
+        return defaults
+
+    def __init__(self, hosts, config_file=None,
+                 sharding=True, replication=False):
         """Create a new MongoDB cluster with the given hosts.
 
         Args:
@@ -58,41 +64,33 @@ class MongoDBCluster(Cluster):
             The path of the config file to be used.
         """
 
-        # Load cluster properties
-        config = ConfigParser(self.defaults)
-        config.add_section("cluster")
-        config.add_section("local")
+        super(MongoDBCluster, self).__init__(hosts, config_file)
 
-        if config_file:
-            config.readfp(open(config_file))
-
-        self.base_dir = config.get("cluster", "mongodb_base_dir")
-        self.data_dir = config.get("cluster", "mongodb_data_dir")
-        self.conf_dir = config.get("cluster", "mongodb_conf_dir")
-        self.logs_file = config.get("cluster", "mongodb_logs_file")
-        self.port = config.getint("cluster", "mongodb_port")
-        self.local_base_conf_dir = config.get("local", "local_base_conf_dir")
-
+        # Cluster properties
+        ctype = self.get_cluster_type()
+        self.data_dir = self.config.get("cluster", ctype + "_data_dir")
+        self.logs_dir = self.config.get("cluster", ctype + "_logs_dir")
+        self.md_port = self.config.getint("cluster", ctype + "_md_port")
+        self.ms_port = self.config.getint("cluster", ctype + "_ms_port")
         self.bin_dir = self.base_dir + "/bin"
+        self.conf_mandatory_files = [CONF_FILE]
 
-        # Configure nodes
-        self.hosts = hosts
+        # Configure master
         self.master = hosts[0]
 
-        self.do_replication = len(self.hosts) > 1
+        self.do_sharding = sharding
+        self.initialized_sharding = False
+        self.mongos_pid_file = self.base_dir + "/mongos.pid"
+        self.do_replication = replication
+        # TODO: allow more fine-frained configuration of hosts: assign roles
 
-        # Store cluster information
-        self.host_clusters = {}
-        for h in self.hosts:
-            g5k_cluster = get_host_cluster(h)
-            if g5k_cluster in self.host_clusters:
-                self.host_clusters[g5k_cluster].append(h)
-            else:
-                self.host_clusters[g5k_cluster] = [h]
-
-        logger.info("MongoDB cluster created with master " + str(self.master) +
-                    " and hosts " + str(self.hosts) +
-                    (" with replication" if self.do_replication else ""))
+        logger.info("MongoDB cluster created with master %s and hosts %s %s "
+                    "replication, %s sharding",
+                    style.host(self.master.address),
+                    ' '.join([style.host(h.address.split('.')[0])
+                              for h in self.hosts]),
+                    "with" if self.do_replication else "without",
+                    "with" if self.do_sharding else "without")
 
     def bootstrap(self, tar_file):
         """Install MongoDB in all cluster nodes from the specified tgz file.
@@ -102,12 +100,12 @@ class MongoDBCluster(Cluster):
             The file containing MongoDB binaries.
         """
 
-        # 1. Copy hadoop tar file and uncompress
+        # 1. Copy mongo tar file and uncompress
         logger.info("Copy " + tar_file + " to hosts and uncompress")
         rm_files = TaktukRemote("rm -rf " + self.base_dir +
                                 " " + self.conf_dir +
                                 " " + self.data_dir +
-                                " " + self.logs_file,
+                                " " + self.logs_dir,
                                 self.hosts)
 
         put_tar = TaktukPut(self.hosts, [tar_file], "/tmp")
@@ -127,10 +125,14 @@ class MongoDBCluster(Cluster):
         # 3 Create other dirs
         mkdirs = TaktukRemote("mkdir -p " + self.data_dir +
                               " && mkdir -p " + self.conf_dir +
+                              " && mkdir -p " + self.logs_dir +
                               " && touch " + os.path.join(self.conf_dir,
                                                           CONF_FILE),
                               self.hosts)
         mkdirs.run()
+
+        # 4. Generate initial configuration
+        self._initialize_conf()
 
     def initialize(self, default_tuning=False):
         """Initialize the cluster: copy base configuration."""
@@ -140,14 +142,14 @@ class MongoDBCluster(Cluster):
         logger.info("Initializing MongoDB")
 
         # Set basic configuration
-        self._copy_base_conf()
-        self._create_master_and_slave_conf()
+        temp_conf_base_dir = tempfile.mkdtemp("", "mongo-", "/tmp")
+        temp_conf_dir = os.path.join(temp_conf_base_dir, "conf")
+        shutil.copytree(self.init_conf_dir, temp_conf_dir)
 
-        # Configure hosts depending on resource type
-        for g5k_cluster in self.host_clusters:
-            hosts = self.host_clusters[g5k_cluster]
-            self._configure_servers(hosts)
-            self._copy_conf(self.temp_conf_dir, hosts)
+        self._create_master_and_slave_conf(temp_conf_dir)
+        self._configure_servers(temp_conf_dir, default_tuning)
+
+        shutil.rmtree(temp_conf_base_dir)
 
         self.initialized = True
 
@@ -163,42 +165,11 @@ class MongoDBCluster(Cluster):
 
         self.initialized = False
 
-    def _copy_base_conf(self):
-        """Copy base configuration files to tmp dir."""
-
-        self.temp_conf_dir = tempfile.mkdtemp("", "mongodb-", "/tmp")
-        if os.path.get_clists(self.local_base_conf_dir):
-            base_conf_files = [os.path.join(self.local_base_conf_dir, f)
-                               for f in os.listdir(self.local_base_conf_dir)]
-            for f in base_conf_files:
-                shutil.copy(f, self.temp_conf_dir)
-        else:
-            logger.warn(
-                "Local conf dir does not exist. Using default configuration")
-            base_conf_files = []
-
-        mandatory_files = [CONF_FILE]
-
-        missing_conf_files = mandatory_files
-        for f in base_conf_files:
-            f_base_name = os.path.basename(f)
-            if f_base_name in missing_conf_files:
-                missing_conf_files.remove(f_base_name)
-
-        logger.info("Copying missing conf files from master: " + str(
-            missing_conf_files))
-
-        remote_missing_files = [os.path.join(self.conf_dir, f)
-                                for f in missing_conf_files]
-
-        action = Get([self.master], remote_missing_files, self.temp_conf_dir)
-        action.run()
-
-    def _create_master_and_slave_conf(self):
+    def _create_master_and_slave_conf(self, conf_dir):
         """Create master and slaves configuration files."""
 
         # Load configuration
-        conf_file = os.path.join(self.temp_conf_dir, CONF_FILE)
+        conf_file = os.path.join(conf_dir, CONF_FILE)
         with open(conf_file) as conf_stream:
             config = yaml.load(conf_stream, Loader=Loader)
             if not config:
@@ -208,18 +179,14 @@ class MongoDBCluster(Cluster):
         if "systemLog" not in config:
             config["systemLog"] = {}
         config["systemLog"]["destination"] = "file"
-        config["systemLog"]["path"] = self.logs_file
-
-        if "net" not in config:
-            config["net"] = {}
-        config["net"]["port"] = str(self.port)
+        config["systemLog"]["path"] = self.logs_dir + "/mongod.log"
 
         if "storage" not in config:
             config["storage"] = {}
         config["storage"]["dbPath"] = self.data_dir
 
         # Replication
-        if self.do_replication:
+        if self.do_replication or self.do_sharding:
             self.rs_name = "mdb_" + str(self.master.address)
             if "replication" not in config:
                 config["replication"] = {}
@@ -227,12 +194,19 @@ class MongoDBCluster(Cluster):
 
             rep_config["replSetName"] = self.rs_name
 
+        # Sharding
+        if self.do_sharding:
+            if "sharding" not in config:
+                config["sharding"] = {}
+            sh_config = config["sharding"]
+            sh_config["clusterRole"] = "configsvr"
+
         # Write back configuration
         with open(conf_file, "w") as conf_stream:
             conf_stream.write(yaml.dump(config, Dumper=Dumper))
 
-    def _configure_servers(self, hosts=None):
-        pass
+    def _configure_servers(self, conf_dir, default_tuning=False):
+        self._copy_conf(conf_dir)
 
     def _copy_conf(self, conf_dir, hosts=None):
 
@@ -261,36 +235,91 @@ class MongoDBCluster(Cluster):
             return
 
         # Start nodes
-        proc = TaktukRemote(self.bin_dir + "/mongod "
-                            "--fork "
-                            "--config " + os.path.join(self.conf_dir,
-                                                       CONF_FILE) + " ",
-                            self.hosts)
-        proc.run()
+        procs = []
+        for h in self.hosts:
+            mongo_command = (self.bin_dir + "/mongod "
+                             " --fork "
+                             " --config " + os.path.join(self.conf_dir,
+                                                         CONF_FILE) +
+                             " --bind_ip " + h.address +
+                             " --port " + str(self.md_port))
 
-        if not proc.finished_ok:
+            proc = SshProcess(mongo_command, h)
+            proc.start()
+            procs.append(proc)
+
+        finished_ok = True
+        for p in procs:
+            p.wait()
+            if not p.finished_ok:
+                finished_ok = False
+
+        if not finished_ok:
             logger.warn("Error while starting MongoDB")
             return
         else:
             self.running = True
 
         # Start replication
-        logger.info("Configuring replication")
         if self.do_replication:
+            logger.info("Configuring replication")
             mongo_command = "rs.initiate();"
             mongo_command += ';'.join(
-                'rs.add("' + h.address + ':'+ str(self.port) + '")'
+                'rs.add("' + h.address + ':' + str(self.md_port) + '")'
                 for h in self.hosts)
 
             proc = TaktukRemote(self.bin_dir + "/mongo "
-                                               "--eval '" + mongo_command + "'",
+                                "--eval '" + mongo_command + "' " +
+                                self.master.address,
                                 [self.master])
             proc.run()
 
             if not proc.finished_ok:
                 logger.warn("Not able to start replication")
 
-    def start_shell(self, node=None):
+        if self.do_sharding:
+            if not self.initialized_sharding:
+                logger.info("Configuring sharding")
+                time.sleep(2)
+                mongo_command = (
+                    'rs.initiate({'
+                    '_id : "%s",'
+                    'configsvr : true,'
+                    'members : [%s]})' % (
+                        self.rs_name,
+                        ",".join('{ _id : %d, host : "%s:%d" }' %
+                                 (_id, h.address, self.md_port)
+                                 for (_id, h) in enumerate(self.hosts))
+                    )
+                )
+
+                proc = SshProcess(self.bin_dir + "/mongo " +
+                                  "--eval '" + mongo_command + "' " +
+                                  self.master.address,
+                                  self.master)
+                proc.run()
+                if proc.finished_ok:
+                    self.initialized_sharding = True
+                else:
+                    logger.warn("Not able to configure sharding")
+
+            logger.info("Starting sharding servers")
+            mongo_command = (
+                self.bin_dir + "/mongos"
+                " --configdb " + self.rs_name + "/" +
+                ",".join('%s:%d' % (h.address, self.md_port)
+                         for h in self.hosts) +
+                " --bind_ip " + self.master.address +
+                " --port " + str(self.ms_port) +
+                " --fork"
+                " --logpath " + self.logs_dir + "/mongos.log"
+                " --pidfilepath " + self.mongos_pid_file
+            )
+
+            start_ms = TaktukRemote(mongo_command, [self.master])
+            start_ms.run()
+
+    def start_shell(self, node=None, mongos=True):
         """Open a MongoDB shell.
 
         Args:
@@ -304,12 +333,17 @@ class MongoDBCluster(Cluster):
         if not node:
             node = self.master
 
-        call("ssh -t " + node.address + " " +
-             self.bin_dir + "/mongo --port " + str(self.port),
-             shell=True)
+        if mongos and self.do_sharding:
+            call("ssh -t " + node.address + " " +
+                 self.bin_dir + "/mongos --port " + str(self.ms_port),
+                 shell=True)
+        else:
+            call("ssh -t " + node.address + " " +
+                 self.bin_dir + "/mongo --port " + str(self.md_port),
+                 shell=True)
 
     def stop(self):
-        """Stop MongoDB server."""
+        """Stop MongoDB servers."""
 
         self._check_initialization()
 
@@ -319,6 +353,10 @@ class MongoDBCluster(Cluster):
                             "--shutdown "
                             "--dbpath " + self.data_dir,
                             self.hosts)
+        proc.run()
+
+        proc = TaktukRemote("kill $(more " + self.mongos_pid_file + ")",
+                            [self.master])
         proc.run()
 
         self.running = False
@@ -334,7 +372,7 @@ class MongoDBCluster(Cluster):
             self.stop()
             restart = True
 
-        action = Remote("rm -f " + self.logs_file, self.hosts)
+        action = Remote("rm -rf " + self.logs_dir, self.hosts)
         action.run()
 
         if restart:
@@ -372,5 +410,4 @@ class MongoDBCluster(Cluster):
 
     def __force_clean(self):
         pass
-
 
