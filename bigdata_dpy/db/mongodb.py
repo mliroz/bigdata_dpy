@@ -29,6 +29,9 @@ DEFAULT_MONGOS_PORT = 27019
 
 DEFAULT_MONGODB_LOCAL_CONF_DIR = "mongo-conf"
 
+# Other
+NUMA_PREFIX = "numactl --interleave=all"
+
 
 class MongoDBCluster(BaseCluster):
     """This class manages the whole life-cycle of a MongoDB cluster.
@@ -237,7 +240,8 @@ class MongoDBCluster(BaseCluster):
         # Start nodes
         procs = []
         for h in self.hosts:
-            mongo_command = (self.bin_dir + "/mongod "
+            mongo_command = (NUMA_PREFIX + " " +
+                             self.bin_dir + "/mongod "
                              " --fork "
                              " --config " + os.path.join(self.conf_dir,
                                                          CONF_FILE) +
@@ -305,6 +309,7 @@ class MongoDBCluster(BaseCluster):
 
             logger.info("Starting sharding servers")
             mongo_command = (
+                NUMA_PREFIX + " " +
                 self.bin_dir + "/mongos"
                 " --configdb " + self.rs_name + "/" +
                 ",".join('%s:%d' % (h.address, self.md_port)
@@ -335,12 +340,14 @@ class MongoDBCluster(BaseCluster):
 
         if mongos and self.do_sharding:
             call("ssh -t " + node.address + " " +
+                 NUMA_PREFIX + " " +
                  self.bin_dir + "/mongo"
                  " --host " + node.address +
                  " --port " + str(self.ms_port),
                  shell=True)
         else:
             call("ssh -t " + node.address + " " +
+                 NUMA_PREFIX + " " +
                  self.bin_dir + "/mongo"
                  " --host " + node.address +
                  " --port " + str(self.md_port),
