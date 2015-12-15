@@ -248,6 +248,8 @@ class MongoDBCluster(BaseCluster):
                              " --bind_ip " + h.address +
                              " --port " + str(self.md_port))
 
+            logger.debug(mongo_command)
+
             proc = SshProcess(mongo_command, h)
             proc.start()
             procs.append(proc)
@@ -271,6 +273,8 @@ class MongoDBCluster(BaseCluster):
             mongo_command += ';'.join(
                 'rs.add("' + h.address + ':' + str(self.md_port) + '")'
                 for h in self.hosts)
+
+            logger.debug(mongo_command)
 
             proc = TaktukRemote(self.bin_dir + "/mongo "
                                 "--eval '" + mongo_command + "' " +
@@ -297,6 +301,8 @@ class MongoDBCluster(BaseCluster):
                     )
                 )
 
+                logger.debug(mongo_command)
+
                 proc = SshProcess(self.bin_dir + "/mongo " +
                                   "--eval '" + mongo_command + "' " +
                                   self.master.address,
@@ -321,6 +327,8 @@ class MongoDBCluster(BaseCluster):
                 " --pidfilepath " + self.mongos_pid_file
             )
 
+            logger.debug(mongo_command)
+
             start_ms = TaktukRemote(mongo_command, [self.master])
             start_ms.run()
 
@@ -339,19 +347,21 @@ class MongoDBCluster(BaseCluster):
             node = self.master
 
         if mongos and self.do_sharding:
-            call("ssh -t " + node.address + " " +
-                 NUMA_PREFIX + " " +
-                 self.bin_dir + "/mongo"
-                 " --host " + node.address +
-                 " --port " + str(self.ms_port),
-                 shell=True)
+            port = self.ms_port
         else:
-            call("ssh -t " + node.address + " " +
-                 NUMA_PREFIX + " " +
-                 self.bin_dir + "/mongo"
-                 " --host " + node.address +
-                 " --port " + str(self.md_port),
-                 shell=True)
+            port = self.md_port
+
+        mongo_command = (
+            self.bin_dir + "/mongo"
+            " --host " + node.address +
+            " --port " + str(port)
+        )
+
+        logger.debug(mongo_command)
+
+        call("ssh -t " + node.address + " " +
+             NUMA_PREFIX + " " + mongo_command,
+             shell=True)
 
     def stop(self):
         """Stop MongoDB servers."""
